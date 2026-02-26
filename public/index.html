@@ -197,6 +197,53 @@
     /* ── 列表项状态 ───────────────────────────────────────────────── */
     .session-card:hover  { background: var(--hover-bg); }
     .project-item:hover  { background: var(--hover-bg); }
+
+    /* 删除按钮样式 */
+    .delete-session-btn {
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .session-card:hover .delete-session-btn {
+      opacity: 1;
+    }
+    .delete-session-btn:hover {
+      background-color: rgba(239, 68, 68, 0.1);
+      border-radius: 4px;
+    }
+
+    /* ── 回收站弹窗 ───────────────────────────────────────────────── */
+    .trash-modal-overlay {
+      background-color: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(2px);
+    }
+    .trash-item {
+      background-color: var(--bg-tertiary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      transition: all 0.15s;
+    }
+    .trash-item:hover {
+      border-color: var(--border-secondary);
+    }
+    .trash-actions button {
+      transition: all 0.15s;
+    }
+    .trash-badge {
+      position: absolute;
+      top: -2px;
+      right: -2px;
+      min-width: 16px;
+      height: 16px;
+      padding: 0 4px;
+      background-color: #ef4444;
+      color: white;
+      font-size: 10px;
+      font-weight: 600;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
     .project-item.active { background: var(--active-project-bg); color: #fff; }
     .session-card.active { background: var(--active-session-bg); color: #fff; }
 
@@ -226,6 +273,10 @@
       <button id="search-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1.5 rounded transition">搜索</button>
       <button id="clear-search-btn" class="text-sm px-2 py-1.5 hidden">✕ 清除</button>
     </div>
+    <button id="trash-btn" class="theme-toggle-btn relative" title="回收站">
+      <span>🗑️</span>
+      <span id="trash-badge" class="trash-badge hidden"></span>
+    </button>
     <button id="theme-toggle" class="theme-toggle-btn" title="切换明暗模式">
       <span id="theme-icon">🌙</span>
     </button>
@@ -266,6 +317,42 @@
 
   </div>
 
+  <!-- 回收站弹窗 -->
+  <div id="trash-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center trash-modal-overlay">
+    <div class="bg-[var(--bg-secondary)] rounded-lg shadow-xl w-[600px] max-h-[80vh] flex flex-col border border-[var(--border-primary)]">
+      <!-- 标题栏 -->
+      <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-primary)]">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🗑️</span>
+          <span class="font-semibold t-text-primary">回收站</span>
+        </div>
+        <button id="close-trash-btn" class="t-text-muted hover:t-text-primary transition-colors">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+
+      <!-- 统计信息 -->
+      <div class="px-4 py-2 text-sm t-text-muted border-b border-[var(--border-primary)]">
+        共 <span id="trash-count">0</span> 个 session · 30 天后自动清理
+      </div>
+
+      <!-- 列表 -->
+      <div id="trash-list" class="flex-1 overflow-y-auto p-4 space-y-2" style="max-height: 50vh;">
+        <div class="text-center t-text-muted py-8">加载中...</div>
+      </div>
+
+      <!-- 底部操作 -->
+      <div class="px-4 py-3 border-t border-[var(--border-primary)] flex justify-between">
+        <button id="close-trash-btn-2" class="px-4 py-2 text-sm t-text-secondary hover:t-text-primary transition-colors">
+          关闭
+        </button>
+        <button id="empty-trash-btn" class="px-4 py-2 text-sm text-red-400 hover:text-red-300 transition-colors disabled:opacity-50 disabled:cursor-not-allowed" disabled>
+          清空回收站
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
   // ─── Theme ───────────────────────────────────────────────────
   function getTheme() {
@@ -294,7 +381,9 @@
     projects: [],
     currentProjectId: null,
     currentSessionId: null,
-    searchMode: false
+    searchMode: false,
+    trashItems: [],
+    trashLoading: false
   }
 
   // ─── Helpers ─────────────────────────────────────────────────
@@ -420,11 +509,21 @@
       html += `<div class="px-3 py-1.5 text-xs font-semibold t-text-muted uppercase tracking-wider t-bg-elevated sticky top-0">${label}</div>`
       html += items.map(s => `
         <div
-          class="session-card px-3 py-2.5 cursor-pointer border-b t-border-faint transition-colors"
+          class="session-card px-3 py-2.5 cursor-pointer border-b t-border-faint transition-colors group relative"
           data-id="${s.id}"
           data-project="${s.projectId || projectId}"
         >
-          <div class="text-xs t-text-secondary mb-1 truncate">${s.firstUserMessage || '(空 session)'}</div>
+          <div class="flex items-start justify-between">
+            <div class="text-xs t-text-secondary mb-1 truncate flex-1 pr-6">${s.firstUserMessage || '(空 session)'}</div>
+            <button
+              class="delete-session-btn absolute right-2 top-2 text-red-400 hover:text-red-300 transition-opacity p-1"
+              data-id="${s.id}"
+              data-project="${s.projectId || projectId}"
+              title="删除 session"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+            </button>
+          </div>
           <div class="text-xs t-text-faint flex items-center gap-2 mt-1">
             <span>${formatDateTime(s.startTime)}</span>
             <span class="t-text-fainter">·</span>
@@ -442,6 +541,16 @@
         el.querySelectorAll('.session-card').forEach(c => c.classList.remove('active'))
         card.classList.add('active')
         loadSession(card.dataset.project, card.dataset.id)
+      })
+    })
+
+    // 删除按钮事件监听
+    el.querySelectorAll('.delete-session-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation() // 阻止触发 session 选择
+        const sessionId = btn.dataset.id
+        const projectId = btn.dataset.project
+        handleDeleteSession(sessionId, projectId)
       })
     })
   }
@@ -690,6 +799,261 @@
     }
   }
 
+  // 删除 session 处理函数
+  async function handleDeleteSession(sessionId, projectId) {
+    // 确认对话框
+    if (!confirm('确定要删除这个 session 吗？\n删除后可在回收站中恢复（保留 30 天）')) {
+      return
+    }
+
+    setStatus('删除中...')
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}?projectId=${encodeURIComponent(projectId)}`, {
+        method: 'DELETE'
+      })
+      const json = await res.json()
+
+      if (!json.success) {
+        throw new Error(json.error || '删除失败')
+      }
+
+      // 从当前列表中移除
+      const sessionEl = $('session-list')
+      const card = sessionEl.querySelector(`.session-card[data-id="${sessionId}"]`)
+      if (card) {
+        card.remove()
+      }
+
+      // 如果当前正在查看这个 session，清空聊天区域
+      if (state.currentSessionId === sessionId) {
+        $('chat-content').innerHTML = ''
+        $('chat-header').innerHTML = '<div class="text-sm t-text-muted">← 选择 Session</div>'
+        state.currentSessionId = null
+      }
+
+      // 更新计数
+      const count = sessionEl.querySelectorAll('.session-card').length
+      $('session-count').textContent = `(${count})`
+
+      // 更新回收站角标
+      updateTrashBadge(1)
+
+      setStatus('已移至回收站')
+    } catch (err) {
+      setStatus('删除失败: ' + err.message, true)
+      alert('删除失败: ' + err.message)
+    }
+  }
+
+  // ─── Trash Functions ──────────────────────────────────────────
+
+  function openTrashModal() {
+    $('trash-modal').classList.remove('hidden')
+    loadTrash()
+  }
+
+  function closeTrashModal() {
+    $('trash-modal').classList.add('hidden')
+  }
+
+  async function loadTrash() {
+    if (state.trashLoading) return
+    state.trashLoading = true
+
+    const trashList = $('trash-list')
+    trashList.innerHTML = '<div class="text-center t-text-muted py-8">加载中...</div>'
+
+    try {
+      const res = await fetch('/api/trash')
+      const json = await res.json()
+
+      if (!json.success) {
+        throw new Error(json.error || '加载失败')
+      }
+
+      state.trashItems = json.data.items
+      renderTrashItems(state.trashItems)
+      updateTrashBadge(state.trashItems.length, true)
+    } catch (err) {
+      trashList.innerHTML = `<div class="text-center text-red-400 py-8">加载失败: ${err.message}</div>`
+    } finally {
+      state.trashLoading = false
+    }
+  }
+
+  function renderTrashItems(items) {
+    const trashList = $('trash-list')
+    const emptyBtn = $('empty-trash-btn')
+
+    $('trash-count').textContent = items.length
+
+    if (items.length === 0) {
+      trashList.innerHTML = '<div class="text-center t-text-muted py-8">回收站为空</div>'
+      emptyBtn.disabled = true
+      return
+    }
+
+    emptyBtn.disabled = false
+
+    trashList.innerHTML = items.map(item => `
+      <div class="trash-item p-3" data-id="${item.sessionId}" data-project="${item.projectId}">
+        <div class="flex items-start justify-between mb-2">
+          <div class="flex-1 min-w-0">
+            <div class="text-xs text-blue-500 mb-1 truncate">${shortProjectName(item.projectName)}</div>
+            <div class="text-sm t-text-primary truncate">${item.firstUserMessage}</div>
+          </div>
+        </div>
+        <div class="flex items-center justify-between">
+          <div class="text-xs t-text-muted">
+            <span>${item.messageCount} 条</span>
+            <span class="mx-1">·</span>
+            <span>${timeAgo(item.deletedAt)}</span>
+            <span class="mx-1">·</span>
+            <span class="text-yellow-600">${item.daysRemaining} 天后清理</span>
+          </div>
+          <div class="trash-actions flex gap-2">
+            <button class="restore-btn text-xs px-2 py-1 bg-green-600/20 text-green-400 hover:bg-green-600/30 rounded transition-colors"
+                    data-id="${item.sessionId}" data-project="${item.projectId}">
+              恢复
+            </button>
+            <button class="permanent-delete-btn text-xs px-2 py-1 bg-red-600/20 text-red-400 hover:bg-red-600/30 rounded transition-colors"
+                    data-id="${item.sessionId}" data-project="${item.projectId}">
+              删除
+            </button>
+          </div>
+        </div>
+      </div>
+    `).join('')
+
+    // 绑定恢复按钮事件
+    trashList.querySelectorAll('.restore-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        handleRestore(btn.dataset.id, btn.dataset.project)
+      })
+    })
+
+    // 绑定永久删除按钮事件
+    trashList.querySelectorAll('.permanent-delete-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        handlePermanentDelete(btn.dataset.id, btn.dataset.project)
+      })
+    })
+  }
+
+  async function handleRestore(sessionId, projectId) {
+    if (!confirm('确定要恢复这个 session 吗？')) return
+
+    setStatus('恢复中...')
+    try {
+      const res = await fetch(`/api/trash/${encodeURIComponent(sessionId)}/restore?projectId=${encodeURIComponent(projectId)}`, {
+        method: 'POST'
+      })
+      const json = await res.json()
+
+      if (!json.success) {
+        throw new Error(json.error || '恢复失败')
+      }
+
+      // 从列表中移除
+      state.trashItems = state.trashItems.filter(item =>
+        !(item.sessionId === sessionId && item.projectId === projectId)
+      )
+      renderTrashItems(state.trashItems)
+      updateTrashBadge(state.trashItems.length, true)
+
+      setStatus('已恢复')
+    } catch (err) {
+      setStatus('恢复失败: ' + err.message, true)
+      alert('恢复失败: ' + err.message)
+    }
+  }
+
+  async function handlePermanentDelete(sessionId, projectId) {
+    if (!confirm('确定要永久删除这个 session 吗？\n此操作不可恢复！')) return
+
+    setStatus('删除中...')
+    try {
+      const res = await fetch(`/api/trash/${encodeURIComponent(sessionId)}?projectId=${encodeURIComponent(projectId)}`, {
+        method: 'DELETE'
+      })
+      const json = await res.json()
+
+      if (!json.success) {
+        throw new Error(json.error || '删除失败')
+      }
+
+      // 从列表中移除
+      state.trashItems = state.trashItems.filter(item =>
+        !(item.sessionId === sessionId && item.projectId === projectId)
+      )
+      renderTrashItems(state.trashItems)
+      updateTrashBadge(state.trashItems.length, true)
+
+      setStatus('已永久删除')
+    } catch (err) {
+      setStatus('删除失败: ' + err.message, true)
+      alert('删除失败: ' + err.message)
+    }
+  }
+
+  async function handleEmptyTrash() {
+    const count = state.trashItems.length
+    if (count === 0) return
+
+    if (!confirm(`确定要清空回收站吗？\n将永久删除 ${count} 个 session，此操作不可恢复！`)) return
+
+    setStatus('清空中...')
+    try {
+      const res = await fetch('/api/trash', {
+        method: 'DELETE'
+      })
+      const json = await res.json()
+
+      if (!json.success) {
+        throw new Error(json.error || '清空失败')
+      }
+
+      state.trashItems = []
+      renderTrashItems(state.trashItems)
+      updateTrashBadge(0, true)
+
+      setStatus('回收站已清空')
+    } catch (err) {
+      setStatus('清空失败: ' + err.message, true)
+      alert('清空失败: ' + err.message)
+    }
+  }
+
+  function updateTrashBadge(count, absolute = false) {
+    const badge = $('trash-badge')
+    if (absolute) {
+      // 直接设置数值
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : count
+        badge.classList.remove('hidden')
+      } else {
+        badge.classList.add('hidden')
+      }
+    } else {
+      // 增量更新
+      const current = parseInt(badge.textContent) || 0
+      const newCount = current + count
+      if (newCount > 0) {
+        badge.textContent = newCount > 99 ? '99+' : newCount
+        badge.classList.remove('hidden')
+      } else {
+        badge.classList.add('hidden')
+      }
+    }
+  }
+
+  // 点击弹窗外部关闭
+  $('trash-modal').addEventListener('click', (e) => {
+    if (e.target === $('trash-modal')) {
+      closeTrashModal()
+    }
+  })
+
   async function doSearch() {
     const keyword = $('search-input').value.trim()
     if (!keyword) return
@@ -739,6 +1103,10 @@
   $('search-btn').addEventListener('click', doSearch)
   $('clear-search-btn').addEventListener('click', clearSearch)
   $('theme-toggle').addEventListener('click', toggleTheme)
+  $('trash-btn').addEventListener('click', openTrashModal)
+  $('close-trash-btn').addEventListener('click', closeTrashModal)
+  $('close-trash-btn-2').addEventListener('click', closeTrashModal)
+  $('empty-trash-btn').addEventListener('click', handleEmptyTrash)
 
   // 监听系统主题变化（仅在用户未手动选择时生效）
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
@@ -768,6 +1136,18 @@
   applyTheme(getTheme())
 
   loadProjects()
+
+  // 加载回收站数量
+  fetch('/api/trash')
+    .then(res => res.json())
+    .then(json => {
+      if (json.success) {
+        updateTrashBadge(json.data.items.length, true)
+      }
+    })
+    .catch(() => {
+      // 忽略错误
+    })
   </script>
 </body>
 </html>

@@ -1,7 +1,10 @@
 const fs = require('fs')
 const path = require('path')
-const { CLAUDE_PROJECTS_DIR } = require('./scanner')
+const os = require('os')
 const { searchInSession } = require('./parser')
+
+const HOME_DIR = process.env.HOME || process.env.USERPROFILE || os.homedir()
+const CLAUDE_PROJECTS_DIR = path.join(HOME_DIR, '.claude', 'projects')
 
 /**
  * 全局搜索
