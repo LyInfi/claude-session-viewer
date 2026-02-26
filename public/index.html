@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Claude Session Viewer</title>
+
+  <!-- 防 FOUC：在任何 CSS 加载前根据 localStorage / 系统偏好设置主题 -->
+  <script>
+    (function() {
+      const stored = localStorage.getItem('theme')
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+      document.documentElement.setAttribute('data-theme', stored || (prefersDark ? 'dark' : 'light'))
+    })()
+  </script>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <link id="hljs-theme" rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" />
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+
+  <style>
+    /* ── CSS 变量：主题颜色 ───────────────────────────────────── */
+    :root {
+      /* Dark theme（默认） */
+      --bg-primary:      #030712;
+      --bg-secondary:    #111827;
+      --bg-tertiary:     #1f2937;
+      --bg-elevated:     rgba(17, 24, 39, 0.5);
+
+      --border-primary:  #1f2937;
+      --border-secondary:#374151;
+      --border-subtle:   rgba(55, 65, 81, 0.5);
+      --border-faint:    rgba(55, 65, 81, 0.3);
+
+      --text-primary:    #e5e7eb;
+      --text-secondary:  #9ca3af;
+      --text-muted:      #6b7280;
+      --text-faint:      #4b5563;
+      --text-fainter:    #374151;
+      --text-accent:     #60a5fa;
+
+      --msg-user-bg:     #1e293b;
+      --msg-assistant-bg:#111827;
+
+      --code-bg:         #0d1117;
+      --code-inline-bg:  #1e293b;
+      --code-inline-text:#e2e8f0;
+
+      --tool-bg:         #0f172a;
+      --tool-border:     #1e3a5f;
+      --thinking-bg:     #1a1a2e;
+      --thinking-border: #2d2d4e;
+
+      --scrollbar-thumb: #374151;
+      --highlight-bg:    #854d0e;
+      --highlight-text:  #fef3c7;
+
+      --hover-bg:            #1e293b;
+      --active-project-bg:   #1d4ed8;
+      --active-session-bg:   #1e40af;
+
+      --table-header-bg: #1f2937;
+      --table-border:    #374151;
+      --blockquote-border:#4b5563;
+      --blockquote-text: #9ca3af;
+
+      --input-bg:        #1f2937;
+      --input-border:    #374151;
+      --input-text:      #e5e7eb;
+      --input-placeholder:#6b7280;
+    }
+
+    [data-theme="light"] {
+      --bg-primary:      #ffffff;
+      --bg-secondary:    #f9fafb;
+      --bg-tertiary:     #f3f4f6;
+      --bg-elevated:     rgba(243, 244, 246, 0.85);
+
+      --border-primary:  #e5e7eb;
+      --border-secondary:#d1d5db;
+      --border-subtle:   rgba(209, 213, 219, 0.7);
+      --border-faint:    rgba(209, 213, 219, 0.5);
+
+      --text-primary:    #111827;
+      --text-secondary:  #4b5563;
+      --text-muted:      #6b7280;
+      --text-faint:      #9ca3af;
+      --text-fainter:    #9ca3af;
+      --text-accent:     #2563eb;
+
+      --msg-user-bg:     #eff6ff;
+      --msg-assistant-bg:#f9fafb;
+
+      --code-bg:         #f6f8fa;
+      --code-inline-bg:  #f1f5f9;
+      --code-inline-text:#334155;
+
+      --tool-bg:         #eff6ff;
+      --tool-border:     #bfdbfe;
+      --thinking-bg:     #faf5ff;
+      --thinking-border: #e9d5ff;
+
+      --scrollbar-thumb: #d1d5db;
+      --highlight-bg:    #fef3c7;
+      --highlight-text:  #92400e;
+
+      --hover-bg:            #f3f4f6;
+      --active-project-bg:   #2563eb;
+      --active-session-bg:   #3b82f6;
+
+      --table-header-bg: #f3f4f6;
+      --table-border:    #e5e7eb;
+      --blockquote-border:#d1d5db;
+      --blockquote-text: #6b7280;
+
+      --input-bg:        #ffffff;
+      --input-border:    #d1d5db;
+      --input-text:      #111827;
+      --input-placeholder:#9ca3af;
+    }
+
+    /* ── 全局 ──────────────────────────────────────────────────── */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+    }
+
+    /* ── 结构组件 ───────────────────────────────────────────────── */
+    .top-bar         { background-color: var(--bg-secondary); border-bottom: 1px solid var(--border-primary); }
+    .sidebar-panel   { background-color: var(--bg-primary);   border-right:  1px solid var(--border-primary); }
+    .panel-header    { color: var(--text-muted);               border-bottom: 1px solid var(--border-primary); }
+    .chat-panel      { background-color: var(--bg-primary); }
+    .chat-panel-header { border-bottom: 1px solid var(--border-primary); }
+
+    /* ── 输入框 ─────────────────────────────────────────────────── */
+    .input-field { background-color: var(--input-bg); border: 1px solid var(--input-border); color: var(--input-text); }
+    .input-field::placeholder { color: var(--input-placeholder); }
+
+    /* ── 主题切换按钮 ───────────────────────────────────────────── */
+    .theme-toggle-btn {
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      border: 1px solid var(--border-secondary);
+      background-color: var(--bg-tertiary);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+    .theme-toggle-btn:hover { background-color: var(--hover-bg); color: var(--text-primary); }
+
+    /* ── 清除按钮 hover ──────────────────────────────────────────── */
+    #clear-search-btn { color: var(--text-muted); transition: color 0.15s; }
+    #clear-search-btn:hover { color: var(--text-primary); }
+
+    /* ── 主题文字辅助类 ─────────────────────────────────────────── */
+    .t-text-primary   { color: var(--text-primary); }
+    .t-text-secondary { color: var(--text-secondary); }
+    .t-text-muted     { color: var(--text-muted); }
+    .t-text-faint     { color: var(--text-faint); }
+    .t-text-fainter   { color: var(--text-fainter); }
+    .t-bg-elevated    { background-color: var(--bg-elevated); }
+    .t-border-subtle  { border-color: var(--border-subtle); }
+    .t-border-faint   { border-color: var(--border-faint); }
+
+    /* ── Prose 样式 ──────────────────────────────────────────────── */
+    .prose { max-width: none; }
+    .prose pre { background: var(--code-bg); border-radius: 6px; padding: 1rem; overflow-x: auto; }
+    .prose code:not(pre code) { background: var(--code-inline-bg); color: var(--code-inline-text); padding: 2px 5px; border-radius: 3px; font-size: 0.85em; }
+    .prose p { margin: 0.5rem 0; line-height: 1.7; }
+    .prose ul, .prose ol { padding-left: 1.5rem; margin: 0.5rem 0; }
+    .prose li { margin: 0.25rem 0; }
+    .prose h1,.prose h2,.prose h3 { font-weight: 600; margin: 1rem 0 0.5rem; }
+    .prose h1 { font-size: 1.4em; }
+    .prose h2 { font-size: 1.2em; }
+    .prose h3 { font-size: 1.1em; }
+    .prose blockquote { border-left: 3px solid var(--blockquote-border); padding-left: 1rem; color: var(--blockquote-text); margin: 0.5rem 0; }
+    .prose table { border-collapse: collapse; width: 100%; margin: 0.5rem 0; }
+    .prose th, .prose td { border: 1px solid var(--table-border); padding: 0.4rem 0.7rem; }
+    .prose th { background: var(--table-header-bg); }
+    .prose a { color: var(--text-accent); text-decoration: underline; }
+
+    /* ── 滚动条 ──────────────────────────────────────────────────── */
+    .scrollbar-thin::-webkit-scrollbar { width: 4px; }
+    .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+    .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
+
+    /* ── 消息 / 工具块 ──────────────────────────────────────────── */
+    .tool-block     { background: var(--tool-bg);     border: 1px solid var(--tool-border);     border-radius: 6px; }
+    .thinking-block { background: var(--thinking-bg); border: 1px solid var(--thinking-border); border-radius: 6px; }
+    .msg-user       { background: var(--msg-user-bg); }
+    .msg-assistant  { background: var(--msg-assistant-bg); }
+
+    /* ── 列表项状态 ───────────────────────────────────────────────── */
+    .session-card:hover  { background: var(--hover-bg); }
+    .project-item:hover  { background: var(--hover-bg); }
+    .project-item.active { background: var(--active-project-bg); color: #fff; }
+    .session-card.active { background: var(--active-session-bg); color: #fff; }
+
+    /* ── 其他 ────────────────────────────────────────────────────── */
+    #search-input:focus { outline: 2px solid #3b82f6; }
+    .highlight-match { background: var(--highlight-bg); color: var(--highlight-text); padding: 0 2px; border-radius: 2px; }
+  </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+  <!-- Top Bar -->
+  <div class="top-bar px-4 py-2 flex items-center gap-3 flex-shrink-0">
+    <div class="text-blue-400 font-bold text-sm tracking-wide">⚡ Claude Session Viewer</div>
+    <div class="flex-1 flex items-center gap-2">
+      <input
+        id="search-input"
+        type="text"
+        placeholder="搜索对话内容..."
+        class="input-field flex-1 max-w-md rounded px-3 py-1.5 text-sm"
+      />
+      <select id="search-project" class="input-field rounded px-2 py-1.5 text-sm">
+        <option value="">所有项目</option>
+      </select>
+      <input type="date" id="search-from" class="input-field rounded px-2 py-1.5 text-sm" />
+      <span class="t-text-muted text-xs">至</span>
+      <input type="date" id="search-to" class="input-field rounded px-2 py-1.5 text-sm" />
+      <button id="search-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1.5 rounded transition">搜索</button>
+      <button id="clear-search-btn" class="text-sm px-2 py-1.5 hidden">✕ 清除</button>
+    </div>
+    <button id="theme-toggle" class="theme-toggle-btn" title="切换明暗模式">
+      <span id="theme-icon">🌙</span>
+    </button>
+    <div id="status-indicator" class="text-xs t-text-muted"></div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- Left: Project List -->
+    <div class="sidebar-panel w-56 flex flex-col flex-shrink-0">
+      <div class="panel-header px-3 py-2 text-xs font-semibold uppercase tracking-wider">
+        项目 <span id="project-count"></span>
+      </div>
+      <div id="project-list" class="flex-1 overflow-y-auto scrollbar-thin">
+        <div class="px-3 py-4 text-sm t-text-muted">加载中...</div>
+      </div>
+    </div>
+
+    <!-- Middle: Session List -->
+    <div class="sidebar-panel w-72 flex flex-col flex-shrink-0">
+      <div class="panel-header px-3 py-2 text-xs font-semibold uppercase tracking-wider flex items-center justify-between">
+        <span>Sessions <span id="session-count"></span></span>
+      </div>
+      <div id="session-list" class="flex-1 overflow-y-auto scrollbar-thin">
+        <div class="px-3 py-4 text-sm t-text-muted">← 选择项目</div>
+      </div>
+    </div>
+
+    <!-- Right: Chat Detail -->
+    <div class="chat-panel flex-1 flex flex-col min-w-0">
+      <div id="chat-header" class="chat-panel-header px-4 py-2 flex items-center justify-between flex-shrink-0">
+        <div class="text-sm t-text-muted">← 选择 Session</div>
+      </div>
+      <div id="chat-content" class="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-3">
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+  // ─── Theme ───────────────────────────────────────────────────
+  function getTheme() {
+    return document.documentElement.getAttribute('data-theme') || 'dark'
+  }
+
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('theme', theme)
+    const icon = document.getElementById('theme-icon')
+    if (icon) icon.textContent = theme === 'dark' ? '🌙' : '☀️'
+    const link = document.getElementById('hljs-theme')
+    if (link) {
+      link.href = theme === 'dark'
+        ? 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css'
+        : 'https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css'
+    }
+  }
+
+  function toggleTheme() {
+    applyTheme(getTheme() === 'dark' ? 'light' : 'dark')
+  }
+
+  // ─── State ───────────────────────────────────────────────────
+  const state = {
+    projects: [],
+    currentProjectId: null,
+    currentSessionId: null,
+    searchMode: false
+  }
+
+  // ─── Helpers ─────────────────────────────────────────────────
+  const $ = id => document.getElementById(id)
+  const setStatus = (msg, isError = false) => {
+    const el = $('status-indicator')
+    el.textContent = msg
+    el.className = `text-xs ${isError ? 'text-red-400' : 't-text-muted'}`
+  }
+
+  function timeAgo(isoStr) {
+    if (!isoStr) return ''
+    const diff = Date.now() - new Date(isoStr).getTime()
+    const mins = Math.floor(diff / 60000)
+    const hrs = Math.floor(mins / 60)
+    const days = Math.floor(hrs / 24)
+    if (days > 30) return new Date(isoStr).toLocaleDateString('zh-CN')
+    if (days > 0) return `${days}天前`
+    if (hrs > 0) return `${hrs}小时前`
+    if (mins > 0) return `${mins}分钟前`
+    return '刚刚'
+  }
+
+  function formatDateTime(isoStr) {
+    if (!isoStr) return ''
+    return new Date(isoStr).toLocaleString('zh-CN', {
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    })
+  }
+
+  function shortProjectName(displayName) {
+    if (!displayName) return '未知'
+    const parts = displayName.replace(/\\/g, '/').split('/').filter(Boolean)
+    return parts.slice(-2).join('/')
+  }
+
+  function groupSessionsByDate(sessions) {
+    const now = new Date()
+    const today = now.toDateString()
+    const yesterday = new Date(now - 86400000).toDateString()
+    const weekAgo = new Date(now - 7 * 86400000)
+
+    const groups = { '今天': [], '昨天': [], '本周': [], '更早': [] }
+    for (const s of sessions) {
+      const d = new Date(s.startTime)
+      const ds = d.toDateString()
+      if (ds === today) groups['今天'].push(s)
+      else if (ds === yesterday) groups['昨天'].push(s)
+      else if (d > weekAgo) groups['本周'].push(s)
+      else groups['更早'].push(s)
+    }
+    return groups
+  }
+
+  // ─── API ─────────────────────────────────────────────────────
+  async function api(url) {
+    const res = await fetch(url)
+    const json = await res.json()
+    if (!json.success) throw new Error(json.error || '请求失败')
+    return json.data
+  }
+
+  // ─── Render: Project List ─────────────────────────────────────
+  function renderProjects(projects) {
+    const el = $('project-list')
+    $('project-count').textContent = `(${projects.length})`
+
+    const sel = $('search-project')
+    sel.innerHTML = '<option value="">所有项目</option>'
+    projects.forEach(p => {
+      const opt = document.createElement('option')
+      opt.value = p.id
+      opt.textContent = shortProjectName(p.displayName)
+      sel.appendChild(opt)
+    })
+
+    if (projects.length === 0) {
+      el.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">无项目</div>'
+      return
+    }
+
+    el.innerHTML = projects.map(p => `
+      <div
+        class="project-item px-3 py-2.5 cursor-pointer border-b t-border-subtle transition-colors"
+        data-id="${p.id}"
+        title="${p.displayName}"
+      >
+        <div class="text-sm font-medium t-text-primary truncate">${shortProjectName(p.displayName)}</div>
+        <div class="text-xs t-text-muted mt-0.5 flex justify-between">
+          <span>${p.sessionCount} sessions</span>
+          <span>${timeAgo(p.lastActivity)}</span>
+        </div>
+      </div>
+    `).join('')
+
+    el.querySelectorAll('.project-item').forEach(item => {
+      item.addEventListener('click', () => {
+        state.searchMode = false
+        $('clear-search-btn').classList.add('hidden')
+        el.querySelectorAll('.project-item').forEach(i => i.classList.remove('active'))
+        item.classList.add('active')
+        loadSessions(item.dataset.id)
+      })
+    })
+  }
+
+  // ─── Render: Session List ─────────────────────────────────────
+  function renderSessions(sessions, projectId) {
+    const el = $('session-list')
+    state.currentProjectId = projectId
+    $('session-count').textContent = `(${sessions.length})`
+
+    if (sessions.length === 0) {
+      el.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">无 session</div>'
+      return
+    }
+
+    const groups = groupSessionsByDate(sessions)
+    let html = ''
+    for (const [label, items] of Object.entries(groups)) {
+      if (items.length === 0) continue
+      html += `<div class="px-3 py-1.5 text-xs font-semibold t-text-muted uppercase tracking-wider t-bg-elevated sticky top-0">${label}</div>`
+      html += items.map(s => `
+        <div
+          class="session-card px-3 py-2.5 cursor-pointer border-b t-border-faint transition-colors"
+          data-id="${s.id}"
+          data-project="${s.projectId || projectId}"
+        >
+          <div class="text-xs t-text-secondary mb-1 truncate">${s.firstUserMessage || '(空 session)'}</div>
+          <div class="text-xs t-text-faint flex items-center gap-2 mt-1">
+            <span>${formatDateTime(s.startTime)}</span>
+            <span class="t-text-fainter">·</span>
+            <span>${s.messageCount} 条</span>
+            ${s.gitBranch ? `<span class="t-text-fainter">·</span><span class="text-blue-500">${s.gitBranch}</span>` : ''}
+            ${s.hasAssistant ? '' : '<span class="text-yellow-600">仅用户</span>'}
+          </div>
+        </div>
+      `).join('')
+    }
+    el.innerHTML = html
+
+    el.querySelectorAll('.session-card').forEach(card => {
+      card.addEventListener('click', () => {
+        el.querySelectorAll('.session-card').forEach(c => c.classList.remove('active'))
+        card.classList.add('active')
+        loadSession(card.dataset.project, card.dataset.id)
+      })
+    })
+  }
+
+  // ─── Render: Chat ─────────────────────────────────────────────
+  function renderContentBlock(block) {
+    if (block.type === 'text') {
+      const text = block.text || ''
+      if (!text.trim()) return ''
+      if (text.startsWith('<local-command-') || text.startsWith('<command-') || text.startsWith('<system-reminder>')) {
+        return `<div class="text-xs t-text-faint italic">[系统消息已折叠]</div>`
+      }
+      try {
+        const rendered = marked.parse(text)
+        return `<div class="prose text-sm t-text-primary">${rendered}</div>`
+      } catch {
+        return `<div class="text-sm t-text-primary whitespace-pre-wrap">${escapeHtml(text)}</div>`
+      }
+    }
+
+    if (block.type === 'thinking') {
+      const text = block.text || ''
+      if (!text.trim()) return ''
+      const id = 'think-' + Math.random().toString(36).slice(2)
+      return `
+        <div class="thinking-block my-1">
+          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-purple-400 hover:text-purple-300">
+            <span>💭 思考过程</span>
+            <span id="${id}-icon">▶</span>
+          </button>
+          <div id="${id}" class="hidden px-3 pb-2">
+            <div class="text-xs t-text-secondary italic whitespace-pre-wrap">${escapeHtml(text.slice(0, 3000))}${text.length > 3000 ? '\n...(已截断)' : ''}</div>
+          </div>
+        </div>
+      `
+    }
+
+    if (block.type === 'tool_use') {
+      const id = 'tool-' + Math.random().toString(36).slice(2)
+      const inputStr = JSON.stringify(block.input, null, 2)
+      const preview = getToolPreview(block.name, block.input)
+      return `
+        <div class="tool-block my-1">
+          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 text-left">
+            <span>🔧 ${escapeHtml(block.name || 'tool')}</span>
+            ${preview ? `<span class="t-text-muted truncate flex-1">${escapeHtml(preview)}</span>` : ''}
+            <span id="${id}-icon">▶</span>
+          </button>
+          <div id="${id}" class="hidden px-3 pb-2">
+            <pre class="text-xs t-text-secondary overflow-x-auto whitespace-pre-wrap">${escapeHtml(inputStr.slice(0, 2000))}${inputStr.length > 2000 ? '\n...(已截断)' : ''}</pre>
+          </div>
+        </div>
+      `
+    }
+
+    if (block.type === 'tool_result') {
+      const id = 'result-' + Math.random().toString(36).slice(2)
+      const text = block.text || ''
+      return `
+        <div class="tool-block my-1 border-green-900/30">
+          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-green-400 hover:text-green-300 text-left">
+            <span>📤 Tool Result</span>
+            <span class="t-text-muted truncate flex-1">${escapeHtml(text.slice(0, 80))}</span>
+            <span id="${id}-icon">▶</span>
+          </button>
+          <div id="${id}" class="hidden px-3 pb-2">
+            <pre class="text-xs t-text-secondary overflow-x-auto whitespace-pre-wrap">${escapeHtml(text.slice(0, 3000))}${text.length > 3000 ? '\n...(已截断)' : ''}</pre>
+          </div>
+        </div>
+      `
+    }
+
+    return ''
+  }
+
+  function getToolPreview(name, input) {
+    if (!input) return ''
+    if (name === 'Bash' || name === 'bash') return input.command?.slice(0, 60) || ''
+    if (name === 'Read' || name === 'Write' || name === 'Edit') return input.file_path?.split('/').slice(-2).join('/') || ''
+    if (name === 'Glob') return input.pattern || ''
+    if (name === 'Grep') return input.pattern || ''
+    if (name === 'WebFetch') return input.url?.slice(0, 60) || ''
+    if (name === 'Task') return input.description || ''
+    return ''
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+
+  function toggleCollapse(id) {
+    const el = document.getElementById(id)
+    const icon = document.getElementById(id + '-icon')
+    if (el) {
+      el.classList.toggle('hidden')
+      if (icon) icon.textContent = el.classList.contains('hidden') ? '▶' : '▼'
+    }
+  }
+  window.toggleCollapse = toggleCollapse
+
+  function renderChat(data) {
+    const { meta, messages } = data
+    const header = $('chat-header')
+    const content = $('chat-content')
+
+    header.innerHTML = `
+      <div class="min-w-0">
+        <div class="text-sm font-medium t-text-primary truncate">${escapeHtml(meta.cwd || '')}</div>
+        <div class="text-xs t-text-faint mt-0.5 flex gap-3">
+          <span>Session: ${escapeHtml(meta.sessionId || '')}</span>
+          ${meta.gitBranch ? `<span>Branch: ${escapeHtml(meta.gitBranch)}</span>` : ''}
+          ${meta.version ? `<span>v${escapeHtml(meta.version)}</span>` : ''}
+        </div>
+      </div>
+      <div class="text-xs t-text-faint">${messages.length} 条消息</div>
+    `
+
+    if (messages.length === 0) {
+      content.innerHTML = '<div class="text-sm t-text-muted py-8 text-center">无消息内容</div>'
+      return
+    }
+
+    const html = messages.map(msg => {
+      const isUser = msg.role === 'user'
+      const blocksHtml = (msg.blocks || []).map(renderContentBlock).join('')
+      if (!blocksHtml.trim()) return ''
+
+      return `
+        <div class="rounded-lg p-3 ${isUser ? 'msg-user' : 'msg-assistant'}">
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="text-xs font-semibold ${isUser ? 'text-blue-400' : 'text-green-400'}">
+              ${isUser ? '👤 用户' : '🤖 Claude'}
+            </span>
+            ${msg.model ? `<span class="text-xs t-text-faint">${escapeHtml(msg.model)}</span>` : ''}
+            <span class="text-xs t-text-faint ml-auto">${formatDateTime(msg.timestamp)}</span>
+          </div>
+          <div>${blocksHtml}</div>
+        </div>
+      `
+    }).join('')
+
+    content.innerHTML = html || '<div class="text-sm t-text-muted py-8 text-center">无可显示的消息</div>'
+
+    content.querySelectorAll('pre code').forEach(el => {
+      hljs.highlightElement(el)
+    })
+
+    content.scrollTop = 0
+  }
+
+  // ─── Render: Search Results ───────────────────────────────────
+  function renderSearchResults(results, keyword) {
+    const sessionEl = $('session-list')
+    const chatEl = $('chat-content')
+    const chatHeader = $('chat-header')
+
+    $('session-count').textContent = `(${results.length} 个匹配)`
+    chatHeader.innerHTML = `<div class="text-sm t-text-secondary">搜索结果: <span class="text-blue-400">${escapeHtml(keyword)}</span></div>`
+    chatEl.innerHTML = '<div class="text-sm t-text-muted py-8 text-center">← 点击搜索结果查看详情</div>'
+
+    if (results.length === 0) {
+      sessionEl.innerHTML = `<div class="px-3 py-4 text-sm t-text-muted">未找到 "${escapeHtml(keyword)}" 的相关内容</div>`
+      return
+    }
+
+    sessionEl.innerHTML = results.map(r => {
+      const project = state.projects.find(p => p.id === r.projectId)
+      const projectName = project ? shortProjectName(project.displayName) : r.projectId
+      const snippets = r.matches.map(m => {
+        const text = m.snippet.replace(
+          new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+          match => `<mark class="highlight-match">${escapeHtml(match)}</mark>`
+        )
+        return `<div class="text-xs t-text-secondary truncate">...${text}...</div>`
+      }).join('')
+
+      return `
+        <div
+          class="session-card px-3 py-2.5 cursor-pointer border-b t-border-faint"
+          data-id="${r.sessionId}"
+          data-project="${r.projectId}"
+        >
+          <div class="text-xs text-blue-500 mb-1 truncate">${escapeHtml(projectName)}</div>
+          <div class="text-xs t-text-muted mb-1">${r.matchCount} 处匹配 · ${timeAgo(r.lastModified)}</div>
+          ${snippets}
+        </div>
+      `
+    }).join('')
+
+    sessionEl.querySelectorAll('.session-card').forEach(card => {
+      card.addEventListener('click', () => {
+        sessionEl.querySelectorAll('.session-card').forEach(c => c.classList.remove('active'))
+        card.classList.add('active')
+        loadSession(card.dataset.project, card.dataset.id)
+      })
+    })
+  }
+
+  // ─── Load Functions ───────────────────────────────────────────
+  async function loadProjects() {
+    setStatus('加载项目...')
+    try {
+      const projects = await api('/api/projects')
+      state.projects = projects
+      renderProjects(projects)
+      setStatus(`${projects.length} 个项目`)
+    } catch (err) {
+      setStatus('加载失败: ' + err.message, true)
+    }
+  }
+
+  async function loadSessions(projectId) {
+    const sessionEl = $('session-list')
+    sessionEl.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">加载中...</div>'
+    $('chat-content').innerHTML = ''
+    $('chat-header').innerHTML = '<div class="text-sm t-text-muted">← 选择 Session</div>'
+
+    setStatus('加载 sessions...')
+    try {
+      const sessions = await api(`/api/projects/${encodeURIComponent(projectId)}/sessions`)
+      renderSessions(sessions, projectId)
+      setStatus(`${sessions.length} 个 sessions`)
+    } catch (err) {
+      sessionEl.innerHTML = `<div class="px-3 py-4 text-sm text-red-400">${err.message}</div>`
+      setStatus('加载失败', true)
+    }
+  }
+
+  async function loadSession(projectId, sessionId) {
+    const chatEl = $('chat-content')
+    chatEl.innerHTML = '<div class="text-sm t-text-muted py-8 text-center">加载中...</div>'
+    state.currentSessionId = sessionId
+
+    setStatus('加载 session...')
+    try {
+      const data = await api(`/api/sessions/${sessionId}?projectId=${encodeURIComponent(projectId)}`)
+      renderChat(data)
+      setStatus(`${data.messages.length} 条消息`)
+    } catch (err) {
+      chatEl.innerHTML = `<div class="text-sm text-red-400 py-8 text-center">${err.message}</div>`
+      setStatus('加载失败', true)
+    }
+  }
+
+  async function doSearch() {
+    const keyword = $('search-input').value.trim()
+    if (!keyword) return
+
+    const project = $('search-project').value
+    const from = $('search-from').value
+    const to = $('search-to').value
+
+    state.searchMode = true
+    $('clear-search-btn').classList.remove('hidden')
+
+    document.querySelectorAll('.project-item').forEach(i => i.classList.remove('active'))
+
+    const sessionEl = $('session-list')
+    sessionEl.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">搜索中...</div>'
+    setStatus('搜索中...')
+
+    try {
+      let url = `/api/search?q=${encodeURIComponent(keyword)}`
+      if (project) url += `&project=${encodeURIComponent(project)}`
+      if (from) url += `&from=${from}`
+      if (to) url += `&to=${to}`
+
+      const res = await fetch(url)
+      const json = await res.json()
+      if (!json.success) throw new Error(json.error)
+
+      renderSearchResults(json.data, keyword)
+      setStatus(`找到 ${json.total} 个匹配`)
+    } catch (err) {
+      sessionEl.innerHTML = `<div class="px-3 py-4 text-sm text-red-400">${err.message}</div>`
+      setStatus('搜索失败', true)
+    }
+  }
+
+  function clearSearch() {
+    $('search-input').value = ''
+    $('clear-search-btn').classList.add('hidden')
+    state.searchMode = false
+    $('session-list').innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">← 选择项目</div>'
+    $('session-count').textContent = ''
+    $('chat-content').innerHTML = ''
+    $('chat-header').innerHTML = '<div class="text-sm t-text-muted">← 选择 Session</div>'
+  }
+
+  // ─── Events ───────────────────────────────────────────────────
+  $('search-btn').addEventListener('click', doSearch)
+  $('clear-search-btn').addEventListener('click', clearSearch)
+  $('theme-toggle').addEventListener('click', toggleTheme)
+
+  // 监听系统主题变化（仅在用户未手动选择时生效）
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    if (!localStorage.getItem('theme')) {
+      applyTheme(e.matches ? 'dark' : 'light')
+    }
+  })
+
+  let searchTimer
+  $('search-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doSearch()
+  })
+  $('search-input').addEventListener('input', () => {
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => {
+      if ($('search-input').value.trim().length >= 2) doSearch()
+    }, 500)
+  })
+
+  // ─── Init ─────────────────────────────────────────────────────
+  marked.setOptions({
+    breaks: true,
+    gfm: true
+  })
+
+  // 初始化主题图标（与 <head> 中的 data-theme 保持同步）
+  applyTheme(getTheme())
+
+  loadProjects()
+  </script>
+</body>
+</html>
