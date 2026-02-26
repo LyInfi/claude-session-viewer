@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#111827" />
   <title>Claude Session Viewer</title>
+  <link rel="preconnect" href="https://cdn.tailwindcss.com" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
 
   <!-- 防 FOUC：在任何 CSS 加载前根据 localStorage / 系统偏好设置主题 -->
   <script>
@@ -22,6 +25,7 @@
   <style>
     /* ── CSS 变量：主题颜色 ───────────────────────────────────── */
     :root {
+      color-scheme: dark;
       /* Dark theme（默认） */
       --bg-primary:      #030712;
       --bg-secondary:    #111827;
@@ -72,6 +76,7 @@
     }
 
     [data-theme="light"] {
+      color-scheme: light;
       --bg-primary:      #ffffff;
       --bg-secondary:    #f9fafb;
       --bg-tertiary:     #f3f4f6;
@@ -146,7 +151,7 @@
       background-color: var(--bg-tertiary);
       color: var(--text-muted);
       cursor: pointer;
-      transition: all 0.15s;
+      transition: background-color 0.15s, color 0.15s, border-color 0.15s;
       font-size: 0.875rem;
       line-height: 1.5;
     }
@@ -170,7 +175,7 @@
     .prose { max-width: none; }
     .prose pre { background: var(--code-bg); border-radius: 6px; padding: 1rem; overflow-x: auto; }
     .prose code:not(pre code) { background: var(--code-inline-bg); color: var(--code-inline-text); padding: 2px 5px; border-radius: 3px; font-size: 0.85em; }
-    .prose p { margin: 0.5rem 0; line-height: 1.7; }
+    .prose p { margin: 0.6rem 0; line-height: 1.8; font-size: 0.9375rem; }
     .prose ul, .prose ol { padding-left: 1.5rem; margin: 0.5rem 0; }
     .prose li { margin: 0.25rem 0; }
     .prose h1,.prose h2,.prose h3 { font-weight: 600; margin: 1rem 0 0.5rem; }
@@ -189,10 +194,15 @@
     .scrollbar-thin::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 2px; }
 
     /* ── 消息 / 工具块 ──────────────────────────────────────────── */
-    .tool-block     { background: var(--tool-bg);     border: 1px solid var(--tool-border);     border-radius: 6px; }
-    .thinking-block { background: var(--thinking-bg); border: 1px solid var(--thinking-border); border-radius: 6px; }
-    .msg-user       { background: var(--msg-user-bg); }
-    .msg-assistant  { background: var(--msg-assistant-bg); }
+    .tool-block     { background: var(--tool-bg);     border: 1px solid var(--tool-border);     border-radius: 6px; border-left: 3px solid #3b82f6; }
+    .tool-block.result { border-left-color: #22c55e; }
+    .system-block   { background: var(--tool-bg);     border: 1px solid var(--tool-border);     border-radius: 6px; border-left: 3px solid #6b7280; }
+    .thinking-block { background: var(--thinking-bg); border: 1px solid var(--thinking-border); border-radius: 6px; border-left: 3px solid #a855f7; }
+    /* 可折叠块 chevron 动画 */
+    .collapse-chevron { transition: transform 0.18s ease; flex-shrink: 0; }
+    .collapse-chevron.open { transform: rotate(90deg); }
+    .msg-user      { background: var(--msg-user-bg);      border-left: 3px solid rgba(59,130,246,0.55); }
+    .msg-assistant { background: var(--msg-assistant-bg); border-left: 3px solid rgba(34,197,94,0.35); }
 
     /* ── 列表项状态 ───────────────────────────────────────────────── */
     .session-card:hover  { background: var(--hover-bg); }
@@ -220,13 +230,13 @@
       background-color: var(--bg-tertiary);
       border: 1px solid var(--border-subtle);
       border-radius: 6px;
-      transition: all 0.15s;
+      transition: border-color 0.15s;
     }
     .trash-item:hover {
       border-color: var(--border-secondary);
     }
     .trash-actions button {
-      transition: all 0.15s;
+      transition: background-color 0.15s, color 0.15s;
     }
     .trash-badge {
       position: absolute;
@@ -246,10 +256,34 @@
     }
     .project-item.active { background: var(--active-project-bg); color: #fff; }
     .session-card.active { background: var(--active-session-bg); color: #fff; }
+    /* 选中状态下覆盖内部 muted 文字为半透明白 */
+    .project-item.active .t-text-muted,
+    .project-item.active .t-text-faint,
+    .project-item.active .t-text-secondary,
+    .project-item.active .t-text-fainter { color: rgba(255,255,255,0.68); }
+    .session-card.active .t-text-muted,
+    .session-card.active .t-text-faint,
+    .session-card.active .t-text-secondary,
+    .session-card.active .t-text-fainter { color: rgba(255,255,255,0.68); }
 
     /* ── 其他 ────────────────────────────────────────────────────── */
     #search-input:focus { outline: 2px solid #3b82f6; }
     .highlight-match { background: var(--highlight-bg); color: var(--highlight-text); padding: 0 2px; border-radius: 2px; }
+
+    /* ── Focus 可见性（键盘导航） ─────────────────────────────────── */
+    button:focus-visible,
+    [role="button"]:focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+    }
+
+    /* ── 运动敏感用户：减少动画 ───────────────────────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+      }
+    }
   </style>
 </head>
 <body class="h-screen flex flex-col overflow-hidden">
@@ -261,24 +295,27 @@
       <input
         id="search-input"
         type="text"
-        placeholder="搜索对话内容..."
+        name="search"
+        placeholder="搜索对话内容…"
+        aria-label="搜索对话内容"
+        autocomplete="off"
         class="input-field flex-1 max-w-md rounded px-3 py-1.5 text-sm"
       />
-      <select id="search-project" class="input-field rounded px-2 py-1.5 text-sm">
+      <select id="search-project" aria-label="筛选项目" class="input-field rounded px-2 py-1.5 text-sm">
         <option value="">所有项目</option>
       </select>
-      <input type="date" id="search-from" class="input-field rounded px-2 py-1.5 text-sm" />
+      <input type="date" id="search-from" name="search-from" aria-label="开始日期" autocomplete="off" class="input-field rounded px-2 py-1.5 text-sm" />
       <span class="t-text-muted text-xs">至</span>
-      <input type="date" id="search-to" class="input-field rounded px-2 py-1.5 text-sm" />
+      <input type="date" id="search-to" name="search-to" aria-label="结束日期" autocomplete="off" class="input-field rounded px-2 py-1.5 text-sm" />
       <button id="search-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1.5 rounded transition">搜索</button>
       <button id="clear-search-btn" class="text-sm px-2 py-1.5 hidden">✕ 清除</button>
     </div>
-    <button id="trash-btn" class="theme-toggle-btn relative" title="回收站">
-      <span>🗑️</span>
+    <button id="trash-btn" class="theme-toggle-btn relative" title="回收站" aria-label="回收站">
+      <span aria-hidden="true">🗑️</span>
       <span id="trash-badge" class="trash-badge hidden"></span>
     </button>
-    <button id="theme-toggle" class="theme-toggle-btn" title="切换明暗模式">
-      <span id="theme-icon">🌙</span>
+    <button id="theme-toggle" class="theme-toggle-btn" title="切换明暗模式" aria-label="切换明暗模式">
+      <span id="theme-icon" aria-hidden="true">🌙</span>
     </button>
     <div id="status-indicator" class="text-xs t-text-muted"></div>
   </div>
@@ -292,7 +329,7 @@
         项目 <span id="project-count"></span>
       </div>
       <div id="project-list" class="flex-1 overflow-y-auto scrollbar-thin">
-        <div class="px-3 py-4 text-sm t-text-muted">加载中...</div>
+        <div class="px-3 py-4 text-sm t-text-muted">加载中…</div>
       </div>
     </div>
 
@@ -311,7 +348,7 @@
       <div id="chat-header" class="chat-panel-header px-4 py-2 flex items-center justify-between flex-shrink-0">
         <div class="text-sm t-text-muted">← 选择 Session</div>
       </div>
-      <div id="chat-content" class="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-3">
+      <div id="chat-content" class="flex-1 overflow-y-auto scrollbar-thin p-4 space-y-5">
       </div>
     </div>
 
@@ -326,7 +363,7 @@
           <span class="text-lg">🗑️</span>
           <span class="font-semibold t-text-primary">回收站</span>
         </div>
-        <button id="close-trash-btn" class="t-text-muted hover:t-text-primary transition-colors">
+        <button id="close-trash-btn" class="t-text-muted hover:t-text-primary transition-colors" aria-label="关闭回收站">
           <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
@@ -338,7 +375,7 @@
 
       <!-- 列表 -->
       <div id="trash-list" class="flex-1 overflow-y-auto p-4 space-y-2" style="max-height: 50vh;">
-        <div class="text-center t-text-muted py-8">加载中...</div>
+        <div class="text-center t-text-muted py-8">加载中…</div>
       </div>
 
       <!-- 底部操作 -->
@@ -471,6 +508,9 @@
         class="project-item px-3 py-2.5 cursor-pointer border-b t-border-subtle transition-colors"
         data-id="${p.id}"
         title="${p.displayName}"
+        role="button"
+        tabindex="0"
+        aria-label="${escapeHtml(p.displayName)}"
       >
         <div class="text-sm font-medium t-text-primary truncate">${shortProjectName(p.displayName)}</div>
         <div class="text-xs t-text-muted mt-0.5 flex justify-between">
@@ -481,13 +521,15 @@
     `).join('')
 
     el.querySelectorAll('.project-item').forEach(item => {
-      item.addEventListener('click', () => {
+      const activate = () => {
         state.searchMode = false
         $('clear-search-btn').classList.add('hidden')
         el.querySelectorAll('.project-item').forEach(i => i.classList.remove('active'))
         item.classList.add('active')
         loadSessions(item.dataset.id)
-      })
+      }
+      item.addEventListener('click', activate)
+      item.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate() } })
     })
   }
 
@@ -509,17 +551,21 @@
       html += `<div class="px-3 py-1.5 text-xs font-semibold t-text-muted uppercase tracking-wider t-bg-elevated sticky top-0">${label}</div>`
       html += items.map(s => `
         <div
-          class="session-card px-3 py-2.5 cursor-pointer border-b t-border-faint transition-colors group relative"
+          class="session-card px-3 py-3 cursor-pointer border-b t-border-faint transition-colors group relative"
           data-id="${s.id}"
           data-project="${s.projectId || projectId}"
+          role="button"
+          tabindex="0"
+          aria-label="${escapeHtml(s.firstUserMessage || '空 session')}"
         >
           <div class="flex items-start justify-between">
-            <div class="text-xs t-text-secondary mb-1 truncate flex-1 pr-6">${s.firstUserMessage || '(空 session)'}</div>
+            <div class="text-sm t-text-secondary mb-1 truncate flex-1 pr-6">${s.firstUserMessage || '(空 session)'}</div>
             <button
               class="delete-session-btn absolute right-2 top-2 text-red-400 hover:text-red-300 transition-opacity p-1"
               data-id="${s.id}"
               data-project="${s.projectId || projectId}"
               title="删除 session"
+              aria-label="删除 session"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
             </button>
@@ -537,11 +583,13 @@
     el.innerHTML = html
 
     el.querySelectorAll('.session-card').forEach(card => {
-      card.addEventListener('click', () => {
+      const activate = () => {
         el.querySelectorAll('.session-card').forEach(c => c.classList.remove('active'))
         card.classList.add('active')
         loadSession(card.dataset.project, card.dataset.id)
-      })
+      }
+      card.addEventListener('click', activate)
+      card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate() } })
     })
 
     // 删除按钮事件监听
@@ -561,7 +609,19 @@
       const text = block.text || ''
       if (!text.trim()) return ''
       if (text.startsWith('<local-command-') || text.startsWith('<command-') || text.startsWith('<system-reminder>')) {
-        return `<div class="text-xs t-text-faint italic">[系统消息已折叠]</div>`
+        const id = 'sys-' + Math.random().toString(36).slice(2)
+        return `
+          <div class="system-block">
+            <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs t-text-muted hover:t-text-secondary text-left">
+              <span>⚙️ 系统消息</span>
+              <span class="flex-1"></span>
+              <svg id="${id}-chevron" class="collapse-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+            <div id="${id}" class="hidden px-3 pb-2">
+              <div class="text-xs t-text-faint italic whitespace-pre-wrap">${escapeHtml(text.slice(0, 2000))}${text.length > 2000 ? '\n…(已截断)' : ''}</div>
+            </div>
+          </div>
+        `
       }
       try {
         const rendered = marked.parse(text)
@@ -575,11 +635,13 @@
       const text = block.text || ''
       if (!text.trim()) return ''
       const id = 'think-' + Math.random().toString(36).slice(2)
+      const thinkPreview = text.trim().slice(0, 45).replace(/\n/g, ' ')
       return `
-        <div class="thinking-block my-1">
-          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-purple-400 hover:text-purple-300">
-            <span>💭 思考过程</span>
-            <span id="${id}-icon">▶</span>
+        <div class="thinking-block">
+          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-purple-400 hover:text-purple-300 text-left">
+            <span class="shrink-0">💭 思考过程</span>
+            ${thinkPreview ? `<span class="t-text-muted truncate flex-1">${escapeHtml(thinkPreview)}…</span>` : '<span class="flex-1"></span>'}
+            <svg id="${id}-chevron" class="collapse-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <div id="${id}" class="hidden px-3 pb-2">
             <div class="text-xs t-text-secondary italic whitespace-pre-wrap">${escapeHtml(text.slice(0, 3000))}${text.length > 3000 ? '\n...(已截断)' : ''}</div>
@@ -593,11 +655,11 @@
       const inputStr = JSON.stringify(block.input, null, 2)
       const preview = getToolPreview(block.name, block.input)
       return `
-        <div class="tool-block my-1">
-          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-blue-400 hover:text-blue-300 text-left">
-            <span>🔧 ${escapeHtml(block.name || 'tool')}</span>
-            ${preview ? `<span class="t-text-muted truncate flex-1">${escapeHtml(preview)}</span>` : ''}
-            <span id="${id}-icon">▶</span>
+        <div class="tool-block">
+          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-blue-400 hover:text-blue-300 text-left">
+            <span class="shrink-0">🔧 ${escapeHtml(block.name || 'tool')}</span>
+            ${preview ? `<span class="t-text-muted truncate flex-1">${escapeHtml(preview)}</span>` : '<span class="flex-1"></span>'}
+            <svg id="${id}-chevron" class="collapse-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <div id="${id}" class="hidden px-3 pb-2">
             <pre class="text-xs t-text-secondary overflow-x-auto whitespace-pre-wrap">${escapeHtml(inputStr.slice(0, 2000))}${inputStr.length > 2000 ? '\n...(已截断)' : ''}</pre>
@@ -609,12 +671,13 @@
     if (block.type === 'tool_result') {
       const id = 'result-' + Math.random().toString(36).slice(2)
       const text = block.text || ''
+      const resultPreview = text.trim().slice(0, 60).replace(/\n/g, ' ')
       return `
-        <div class="tool-block my-1 border-green-900/30">
-          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-green-400 hover:text-green-300 text-left">
-            <span>📤 Tool Result</span>
-            <span class="t-text-muted truncate flex-1">${escapeHtml(text.slice(0, 80))}</span>
-            <span id="${id}-icon">▶</span>
+        <div class="tool-block result">
+          <button onclick="toggleCollapse('${id}')" class="w-full flex items-center gap-2 px-3 py-2 text-xs text-green-400 hover:text-green-300 text-left">
+            <span class="shrink-0">📤 工具结果</span>
+            ${resultPreview ? `<span class="t-text-muted truncate flex-1">${escapeHtml(resultPreview)}</span>` : '<span class="flex-1"></span>'}
+            <svg id="${id}-chevron" class="collapse-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
           </button>
           <div id="${id}" class="hidden px-3 pb-2">
             <pre class="text-xs t-text-secondary overflow-x-auto whitespace-pre-wrap">${escapeHtml(text.slice(0, 3000))}${text.length > 3000 ? '\n...(已截断)' : ''}</pre>
@@ -647,10 +710,10 @@
 
   function toggleCollapse(id) {
     const el = document.getElementById(id)
-    const icon = document.getElementById(id + '-icon')
+    const chevron = document.getElementById(id + '-chevron')
     if (el) {
       el.classList.toggle('hidden')
-      if (icon) icon.textContent = el.classList.contains('hidden') ? '▶' : '▼'
+      if (chevron) chevron.classList.toggle('open')
     }
   }
   window.toggleCollapse = toggleCollapse
@@ -683,15 +746,15 @@
       if (!blocksHtml.trim()) return ''
 
       return `
-        <div class="rounded-lg p-3 ${isUser ? 'msg-user' : 'msg-assistant'}">
-          <div class="flex items-center gap-2 mb-1.5">
-            <span class="text-xs font-semibold ${isUser ? 'text-blue-400' : 'text-green-400'}">
+        <div class="rounded-lg px-4 py-3.5 ${isUser ? 'msg-user' : 'msg-assistant'}">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-sm font-semibold ${isUser ? 'text-blue-400' : 'text-green-400'}">
               ${isUser ? '👤 用户' : '🤖 Claude'}
             </span>
             ${msg.model ? `<span class="text-xs t-text-faint">${escapeHtml(msg.model)}</span>` : ''}
             <span class="text-xs t-text-faint ml-auto">${formatDateTime(msg.timestamp)}</span>
           </div>
-          <div>${blocksHtml}</div>
+          <div class="space-y-2">${blocksHtml}</div>
         </div>
       `
     }).join('')
@@ -728,7 +791,7 @@
           new RegExp(keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
           match => `<mark class="highlight-match">${escapeHtml(match)}</mark>`
         )
-        return `<div class="text-xs t-text-secondary truncate">...${text}...</div>`
+        return `<div class="text-xs t-text-secondary truncate">…${text}…</div>`
       }).join('')
 
       return `
@@ -736,6 +799,9 @@
           class="session-card px-3 py-2.5 cursor-pointer border-b t-border-faint"
           data-id="${r.sessionId}"
           data-project="${r.projectId}"
+          role="button"
+          tabindex="0"
+          aria-label="${escapeHtml(projectName)} — ${r.matchCount} 处匹配"
         >
           <div class="text-xs text-blue-500 mb-1 truncate">${escapeHtml(projectName)}</div>
           <div class="text-xs t-text-muted mb-1">${r.matchCount} 处匹配 · ${timeAgo(r.lastModified)}</div>
@@ -745,17 +811,19 @@
     }).join('')
 
     sessionEl.querySelectorAll('.session-card').forEach(card => {
-      card.addEventListener('click', () => {
+      const activate = () => {
         sessionEl.querySelectorAll('.session-card').forEach(c => c.classList.remove('active'))
         card.classList.add('active')
         loadSession(card.dataset.project, card.dataset.id)
-      })
+      }
+      card.addEventListener('click', activate)
+      card.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate() } })
     })
   }
 
   // ─── Load Functions ───────────────────────────────────────────
   async function loadProjects() {
-    setStatus('加载项目...')
+    setStatus('加载项目…')
     try {
       const projects = await api('/api/projects')
       state.projects = projects
@@ -768,11 +836,11 @@
 
   async function loadSessions(projectId) {
     const sessionEl = $('session-list')
-    sessionEl.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">加载中...</div>'
+    sessionEl.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">加载中…</div>'
     $('chat-content').innerHTML = ''
     $('chat-header').innerHTML = '<div class="text-sm t-text-muted">← 选择 Session</div>'
 
-    setStatus('加载 sessions...')
+    setStatus('加载 sessions…')
     try {
       const sessions = await api(`/api/projects/${encodeURIComponent(projectId)}/sessions`)
       renderSessions(sessions, projectId)
@@ -785,10 +853,10 @@
 
   async function loadSession(projectId, sessionId) {
     const chatEl = $('chat-content')
-    chatEl.innerHTML = '<div class="text-sm t-text-muted py-8 text-center">加载中...</div>'
+    chatEl.innerHTML = '<div class="text-sm t-text-muted py-8 text-center">加载中…</div>'
     state.currentSessionId = sessionId
 
-    setStatus('加载 session...')
+    setStatus('加载 session…')
     try {
       const data = await api(`/api/sessions/${sessionId}?projectId=${encodeURIComponent(projectId)}`)
       renderChat(data)
@@ -806,7 +874,7 @@
       return
     }
 
-    setStatus('删除中...')
+    setStatus('删除中…')
     try {
       const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}?projectId=${encodeURIComponent(projectId)}`, {
         method: 'DELETE'
@@ -861,7 +929,7 @@
     state.trashLoading = true
 
     const trashList = $('trash-list')
-    trashList.innerHTML = '<div class="text-center t-text-muted py-8">加载中...</div>'
+    trashList.innerHTML = '<div class="text-center t-text-muted py-8">加载中…</div>'
 
     try {
       const res = await fetch('/api/trash')
@@ -943,7 +1011,7 @@
   async function handleRestore(sessionId, projectId) {
     if (!confirm('确定要恢复这个 session 吗？')) return
 
-    setStatus('恢复中...')
+    setStatus('恢复中…')
     try {
       const res = await fetch(`/api/trash/${encodeURIComponent(sessionId)}/restore?projectId=${encodeURIComponent(projectId)}`, {
         method: 'POST'
@@ -971,7 +1039,7 @@
   async function handlePermanentDelete(sessionId, projectId) {
     if (!confirm('确定要永久删除这个 session 吗？\n此操作不可恢复！')) return
 
-    setStatus('删除中...')
+    setStatus('删除中…')
     try {
       const res = await fetch(`/api/trash/${encodeURIComponent(sessionId)}?projectId=${encodeURIComponent(projectId)}`, {
         method: 'DELETE'
@@ -1002,7 +1070,7 @@
 
     if (!confirm(`确定要清空回收站吗？\n将永久删除 ${count} 个 session，此操作不可恢复！`)) return
 
-    setStatus('清空中...')
+    setStatus('清空中…')
     try {
       const res = await fetch('/api/trash', {
         method: 'DELETE'
@@ -1068,8 +1136,8 @@
     document.querySelectorAll('.project-item').forEach(i => i.classList.remove('active'))
 
     const sessionEl = $('session-list')
-    sessionEl.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">搜索中...</div>'
-    setStatus('搜索中...')
+    sessionEl.innerHTML = '<div class="px-3 py-4 text-sm t-text-muted">搜索中…</div>'
+    setStatus('搜索中…')
 
     try {
       let url = `/api/search?q=${encodeURIComponent(keyword)}`
